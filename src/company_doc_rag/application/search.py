@@ -5,6 +5,7 @@ from dataclasses import replace
 from typing import Protocol
 from uuid import UUID
 
+from company_doc_rag.domain.observability import NoOpTracer, Tracer, text_hash
 from company_doc_rag.domain.ports import Embedder
 from company_doc_rag.domain.search import SearchHit
 
@@ -88,6 +89,7 @@ class HybridSearch:
         rerank_limit: int = 12,
         final_limit: int = 5,
         cache: _SearchCache | None = None,
+        tracer: Tracer | None = None,
     ) -> None:
         self._embedder = embedder
         self._repository = repository
@@ -96,8 +98,25 @@ class HybridSearch:
         self._rerank_limit = rerank_limit
         self._final_limit = final_limit
         self._cache = cache
+        self._tracer = tracer or NoOpTracer()
 
     async def execute(
+        self,
+        question: str,
+        document_ids: Sequence[UUID] | None = None,
+    ) -> list[SearchHit]:
+        with self._tracer.trace(
+            "query.search",
+            {
+                "question_hash": text_hash(question),
+                "document_filter_count": len(document_ids or []),
+            },
+        ) as span:
+            results = await self._execute(question, document_ids)
+            span.set_output({"result_count": len(results)})
+            return results
+
+    async def _execute(
         self,
         question: str,
         document_ids: Sequence[UUID] | None = None,

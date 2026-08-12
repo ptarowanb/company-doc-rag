@@ -5,6 +5,7 @@ from uuid import UUID
 
 from company_doc_rag.domain.documents import ChunkDraft, Document, DocumentStatus, PageText
 from company_doc_rag.domain.errors import DomainError
+from company_doc_rag.domain.observability import NoOpTracer, Tracer
 from company_doc_rag.domain.ports import DocumentLoader, Embedder
 
 
@@ -53,6 +54,7 @@ class IngestDocument:
         chunker: _Chunker,
         embedder: Embedder,
         cache: _CacheGeneration | None = None,
+        tracer: Tracer | None = None,
     ) -> None:
         self._documents = documents
         self._chunks = chunks
@@ -61,8 +63,14 @@ class IngestDocument:
         self._chunker = chunker
         self._embedder = embedder
         self._cache = cache
+        self._tracer = tracer or NoOpTracer()
 
     async def execute(self, document_id: UUID) -> None:
+        with self._tracer.trace("document.ingest", {"document_id": str(document_id)}) as span:
+            await self._execute(document_id)
+            span.set_output({"status": "READY"})
+
+    async def _execute(self, document_id: UUID) -> None:
         document = await self._documents.get(document_id)
         if document.status is DocumentStatus.READY:
             return
@@ -92,4 +100,3 @@ class IngestDocument:
         await self._documents.update_status(document_id, DocumentStatus.READY)
         if self._cache is not None:
             await self._cache.bump_generation()
-

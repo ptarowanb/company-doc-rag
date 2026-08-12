@@ -13,6 +13,7 @@ from company_doc_rag.config import Settings
 from company_doc_rag.infrastructure.cache import SearchCache
 from company_doc_rag.infrastructure.database import create_database
 from company_doc_rag.infrastructure.file_storage import LocalFileStorage
+from company_doc_rag.infrastructure.observability import create_tracer
 from company_doc_rag.infrastructure.openai_client import OpenAIAnswerGenerator, OpenAIEmbedder
 from company_doc_rag.infrastructure.pdf_loader import PdfLoader
 from company_doc_rag.infrastructure.repositories import ChunkRepository, DocumentRepository
@@ -82,11 +83,17 @@ def _shared_components(settings: Settings) -> SharedComponents:
 
 def build_application_runtime(settings: Settings) -> ApplicationRuntime:
     engine, redis, cache, documents, chunks, storage, embedder = _shared_components(settings)
+    tracer = create_tracer(
+        settings.langfuse_public_key.get_secret_value() if settings.langfuse_public_key else None,
+        settings.langfuse_secret_key.get_secret_value() if settings.langfuse_secret_key else None,
+        settings.langfuse_host,
+    )
     search = HybridSearch(
         embedder=embedder,
         repository=chunks,
         reranker=CrossEncoderReranker(),
         cache=cache,
+        tracer=tracer,
     )
     answer_question = AnswerQuestion(
         search=search,
@@ -94,6 +101,7 @@ def build_application_runtime(settings: Settings) -> ApplicationRuntime:
             api_key=settings.openai_api_key.get_secret_value(),
             model=settings.openai_chat_model,
         ),
+        tracer=tracer,
     )
     document_service = DocumentService(
         repository=documents,
@@ -107,6 +115,11 @@ def build_application_runtime(settings: Settings) -> ApplicationRuntime:
 
 def build_worker_runtime(settings: Settings) -> WorkerRuntime:
     engine, redis, cache, documents, chunks, storage, embedder = _shared_components(settings)
+    tracer = create_tracer(
+        settings.langfuse_public_key.get_secret_value() if settings.langfuse_public_key else None,
+        settings.langfuse_secret_key.get_secret_value() if settings.langfuse_secret_key else None,
+        settings.langfuse_host,
+    )
     ingest = IngestDocument(
         documents=documents,
         chunks=chunks,
@@ -115,5 +128,6 @@ def build_worker_runtime(settings: Settings) -> WorkerRuntime:
         chunker=TokenChunker(),
         embedder=embedder,
         cache=cache,
+        tracer=tracer,
     )
     return WorkerRuntime(engine, redis, ingest)

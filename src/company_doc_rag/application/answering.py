@@ -3,6 +3,7 @@ from typing import Protocol
 from uuid import UUID
 
 from company_doc_rag.domain.answers import Answer, AnswerEvent, AnswerEventType, Source
+from company_doc_rag.domain.observability import NoOpTracer, Tracer, text_hash
 from company_doc_rag.domain.search import SearchHit
 
 NO_EVIDENCE_ANSWER = "관련 문서에서 답을 찾지 못했습니다."
@@ -32,40 +33,54 @@ class AnswerQuestion:
         search: _Search,
         generator: AnswerGenerator,
         min_relevance_score: float = 0.0,
+        tracer: Tracer | None = None,
     ) -> None:
         self._search = search
         self._generator = generator
         self._min_relevance_score = min_relevance_score
+        self._tracer = tracer or NoOpTracer()
 
     async def execute(
         self,
         question: str,
         document_ids: Sequence[UUID] | None = None,
     ) -> Answer:
-        hits = self._filter_hits(await self._search.execute(question, document_ids))
-        if not hits:
-            return Answer(text=NO_EVIDENCE_ANSWER, sources=())
-        text = await self._generator.generate(self._build_prompt(question, hits))
-        return Answer(text=text, sources=self._to_sources(hits))
+        with self._tracer.trace(
+            "query.answer",
+            {"question_hash": text_hash(question)},
+        ) as span:
+            hits = self._filter_hits(await self._search.execute(question, document_ids))
+            if not hits:
+                answer = Answer(text=NO_EVIDENCE_ANSWER, sources=())
+            else:
+                text = await self._generator.generate(self._build_prompt(question, hits))
+                answer = Answer(text=text, sources=self._to_sources(hits))
+            span.set_output({"source_count": len(answer.sources)})
+            return answer
 
     async def stream(
         self,
         question: str,
         document_ids: Sequence[UUID] | None = None,
     ) -> AsyncIterator[AnswerEvent]:
-        hits = self._filter_hits(await self._search.execute(question, document_ids))
-        sources = self._to_sources(hits)
-        yield AnswerEvent(
-            type=AnswerEventType.METADATA,
-            metadata={"source_count": len(sources)},
-        )
-        if not hits:
-            yield AnswerEvent(type=AnswerEventType.TOKEN, text=NO_EVIDENCE_ANSWER)
-        else:
-            async for token in self._generator.stream(self._build_prompt(question, hits)):
-                yield AnswerEvent(type=AnswerEventType.TOKEN, text=token)
-        yield AnswerEvent(type=AnswerEventType.SOURCES, sources=sources)
-        yield AnswerEvent(type=AnswerEventType.DONE)
+        with self._tracer.trace(
+            "query.answer.stream",
+            {"question_hash": text_hash(question)},
+        ) as span:
+            hits = self._filter_hits(await self._search.execute(question, document_ids))
+            sources = self._to_sources(hits)
+            yield AnswerEvent(
+                type=AnswerEventType.METADATA,
+                metadata={"source_count": len(sources)},
+            )
+            if not hits:
+                yield AnswerEvent(type=AnswerEventType.TOKEN, text=NO_EVIDENCE_ANSWER)
+            else:
+                async for token in self._generator.stream(self._build_prompt(question, hits)):
+                    yield AnswerEvent(type=AnswerEventType.TOKEN, text=token)
+            yield AnswerEvent(type=AnswerEventType.SOURCES, sources=sources)
+            yield AnswerEvent(type=AnswerEventType.DONE)
+            span.set_output({"source_count": len(sources)})
 
     def _filter_hits(self, hits: Sequence[SearchHit]) -> list[SearchHit]:
         return [
@@ -105,4 +120,3 @@ class AnswerQuestion:
             "주요 문장 끝에 [출처 N]을 표시하세요.\n\n"
             f"질문: {question}\n\n문서 근거:\n{joined_context}"
         )
-

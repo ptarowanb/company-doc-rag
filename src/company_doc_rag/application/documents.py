@@ -82,4 +82,3 @@ class DocumentService:
         await self._repository.delete(document_id)
         self._storage.delete(document.storage_key)
         await self._cache.bump_generation()
-
