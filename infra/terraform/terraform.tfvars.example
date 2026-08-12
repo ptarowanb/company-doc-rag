@@ -1,0 +1,14 @@
+project_name   = "company-doc-rag"
+environment    = "dev"
+aws_region     = "ap-northeast-2"
+container_image = "123456789012.dkr.ecr.ap-northeast-2.amazonaws.com/company-doc-rag-dev:2026-08-12"
+
+allowed_cidr_blocks = ["203.0.113.10/32"]
+db_instance_class   = "db.t4g.micro"
+redis_node_type     = "cache.t4g.micro"
+api_desired_count   = 1
+worker_desired_count = 1
+enable_nat_gateway  = true
+deletion_protection = false
+skip_final_snapshot = true
+
