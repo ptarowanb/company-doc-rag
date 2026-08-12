@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from typing import Protocol, cast
 
 from openai import (
@@ -82,4 +82,37 @@ class OpenAIEmbedder:
                     ) from error
                 await asyncio.sleep(0.2 * (2**attempt))
         raise AssertionError("도달할 수 없는 재시도 상태입니다.")
+
+
+class OpenAIAnswerGenerator:
+    """OpenAI Chat Completions로 근거 기반 답변을 생성한다."""
+
+    def __init__(
+        self,
+        model: str,
+        api_key: str | None = None,
+        client: AsyncOpenAI | None = None,
+    ) -> None:
+        self._client = client or AsyncOpenAI(api_key=api_key)
+        self._model = model
+
+    async def generate(self, prompt: str) -> str:
+        response = await self._client.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        return response.choices[0].message.content or ""
+
+    async def stream(self, prompt: str) -> AsyncIterator[str]:
+        response = await self._client.chat.completions.create(
+            model=self._model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+            stream=True,
+        )
+        async for chunk in response:
+            token = chunk.choices[0].delta.content if chunk.choices else None
+            if token:
+                yield token
 
