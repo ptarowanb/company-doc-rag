@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "company-doc-rag"
+version = "0.1.0"
+description = "사내 문서를 출처와 함께 검색하고 답변하는 RAG 백엔드"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.14,<2",
+  "celery>=5.4,<6",
+  "fastapi>=0.115,<1",
+  "openai>=1.60,<3",
+  "pgvector>=0.3,<1",
+  "psycopg[binary]>=3.2,<4",
+  "pydantic-settings>=2.7,<3",
+  "pymupdf>=1.25,<2",
+  "python-multipart>=0.0.20,<1",
+  "redis>=5.2,<7",
+  "sqlalchemy>=2.0,<3",
+  "sse-starlette>=2.2,<4",
+  "tenacity>=9,<10",
+  "tiktoken>=0.8,<1",
+  "uvicorn[standard]>=0.34,<1",
+]
+
+[project.optional-dependencies]
+reranker = ["sentence-transformers>=3.3,<6"]
+observability = ["langfuse>=3,<4"]
+dev = [
+  "httpx>=0.28,<1",
+  "mypy>=1.14,<2",
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=0.25,<2",
+  "pyyaml>=6,<7",
+  "ruff>=0.9,<1",
+]
+all = [
+  "company-doc-rag[reranker,observability]",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/company_doc_rag"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+  "integration: PostgreSQL 또는 Redis가 필요한 통합 테스트",
+  "external: 유료 또는 외부 API를 호출하는 테스트",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["company_doc_rag"]
+mypy_path = "src"
+
