@@ -1,5 +1,7 @@
 # 사내 문서 AI 검색·질의응답 시스템
 
+[![CI](https://github.com/ptarowanb/company-doc-rag/actions/workflows/ci.yml/badge.svg)](https://github.com/ptarowanb/company-doc-rag/actions/workflows/ci.yml)
+
 한국어 PDF를 업로드하면 페이지 정보를 보존해 청킹·임베딩하고, 벡터 검색과 키워드 검색을 결합한 뒤 reranker로 근거를 정제해 출처와 함께 답변하는 RAG 백엔드입니다.
 
 ## 해결하려는 문제
@@ -97,6 +99,17 @@ python -m evaluation.run --results evaluation/retrieval-results.example.jsonl
 ```
 
 실제 실험에서는 동일한 질문 세트로 벡터 단독, 하이브리드, reranker 결과를 각각 저장해 Recall@5, MRR, nDCG@5를 비교합니다.
+
+## 지속적 통합
+
+`main` Push와 Pull Request마다 GitHub Actions가 다음 항목을 병렬 검증합니다.
+
+- 단위·smoke 테스트, Ruff, mypy, 검색 평가 CLI
+- PostgreSQL 16/pgvector 서비스 기반 migration·통합 테스트
+- Docker Compose 설정, CPU 전용 애플리케이션 이미지
+- Terraform format·초기화·정적 구성
+
+CI에서는 테스트 키만 사용하며 실제 OpenAI·AWS·Langfuse에는 접속하지 않습니다.
 
 ## API
 
