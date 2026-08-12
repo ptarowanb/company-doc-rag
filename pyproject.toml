@@ -30,6 +30,7 @@ dependencies = [
 reranker = ["sentence-transformers>=3.3,<6"]
 observability = ["langfuse>=3,<4"]
 dev = [
+  "aiosqlite>=0.20,<1",
   "httpx>=0.28,<1",
   "mypy>=1.14,<2",
   "pytest>=8.3,<10",
@@ -65,4 +66,3 @@ python_version = "3.12"
 strict = true
 packages = ["company_doc_rag"]
 mypy_path = "src"
-

@@ -33,6 +33,19 @@ class ChunkDraft:
 
 
 @dataclass(frozen=True, slots=True)
+class StoredChunk:
+    """저장된 청크와 출처 메타데이터."""
+
+    id: UUID
+    document_id: UUID
+    index: int
+    content: str
+    page_start: int
+    page_end: int
+    token_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class Document:
     """수집 대상 문서."""
 
