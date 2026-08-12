@@ -28,6 +28,12 @@ class UnsupportedFileTypeError(DomainError):
     code = "UNSUPPORTED_FILE_TYPE"
 
 
+class FileTooLargeError(DomainError):
+    """업로드 제한을 초과한 파일 오류."""
+
+    code = "FILE_TOO_LARGE"
+
+
 class DuplicateDocumentError(DomainError):
     """동일한 해시의 문서가 이미 존재하는 오류."""
 
@@ -44,4 +50,3 @@ class TransientEmbeddingError(DomainError):
     """재시도 가능한 임베딩 공급자 오류."""
 
     code = "TRANSIENT_EMBEDDING_ERROR"
-

@@ -37,6 +37,10 @@ class _Chunker(Protocol):
     def split(self, pages: Sequence[PageText]) -> list[ChunkDraft]: ...
 
 
+class _CacheGeneration(Protocol):
+    async def bump_generation(self) -> int: ...
+
+
 class IngestDocument:
     """PDF 파싱부터 임베딩 저장까지 문서 수집 상태를 조정한다."""
 
@@ -48,6 +52,7 @@ class IngestDocument:
         loader: DocumentLoader,
         chunker: _Chunker,
         embedder: Embedder,
+        cache: _CacheGeneration | None = None,
     ) -> None:
         self._documents = documents
         self._chunks = chunks
@@ -55,6 +60,7 @@ class IngestDocument:
         self._loader = loader
         self._chunker = chunker
         self._embedder = embedder
+        self._cache = cache
 
     async def execute(self, document_id: UUID) -> None:
         document = await self._documents.get(document_id)
@@ -84,4 +90,6 @@ class IngestDocument:
             )
             raise
         await self._documents.update_status(document_id, DocumentStatus.READY)
+        if self._cache is not None:
+            await self._cache.bump_generation()
 

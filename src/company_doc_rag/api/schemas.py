@@ -2,6 +2,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from company_doc_rag.domain.documents import DocumentStatus
+
 
 class QueryRequest(BaseModel):
     """질의응답 요청."""
@@ -28,4 +30,16 @@ class QueryResponse(BaseModel):
 
     answer: str
     sources: list[SourceResponse]
+
+
+class DocumentResponse(BaseModel):
+    """문서 처리 상태 응답."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    filename: str
+    status: DocumentStatus
+    error_code: str | None
+    error_message: str | None
 

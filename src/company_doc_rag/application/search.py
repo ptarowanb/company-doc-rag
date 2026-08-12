@@ -61,6 +61,21 @@ class Reranker(Protocol):
     ) -> list[SearchHit]: ...
 
 
+class _SearchCache(Protocol):
+    async def get(
+        self,
+        question: str,
+        document_ids: Sequence[UUID] | None,
+    ) -> list[SearchHit] | None: ...
+
+    async def set(
+        self,
+        question: str,
+        document_ids: Sequence[UUID] | None,
+        hits: Sequence[SearchHit],
+    ) -> None: ...
+
+
 class HybridSearch:
     """벡터·키워드 검색을 결합하고 최종 근거를 재정렬한다."""
 
@@ -72,6 +87,7 @@ class HybridSearch:
         candidate_limit: int = 20,
         rerank_limit: int = 12,
         final_limit: int = 5,
+        cache: _SearchCache | None = None,
     ) -> None:
         self._embedder = embedder
         self._repository = repository
@@ -79,12 +95,17 @@ class HybridSearch:
         self._candidate_limit = candidate_limit
         self._rerank_limit = rerank_limit
         self._final_limit = final_limit
+        self._cache = cache
 
     async def execute(
         self,
         question: str,
         document_ids: Sequence[UUID] | None = None,
     ) -> list[SearchHit]:
+        if self._cache is not None:
+            cached = await self._cache.get(question, document_ids)
+            if cached is not None:
+                return cached
         embeddings = await self._embedder.embed([question])
         vector_hits, keyword_hits = await asyncio.gather(
             self._repository.vector_search(
@@ -99,9 +120,11 @@ class HybridSearch:
             ),
         )
         fused = reciprocal_rank_fusion([vector_hits, keyword_hits])
-        return await self._reranker.rerank(
+        results = await self._reranker.rerank(
             question,
             fused[: self._rerank_limit],
             self._final_limit,
         )
-
+        if self._cache is not None:
+            await self._cache.set(question, document_ids, results)
+        return results
