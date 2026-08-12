@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -17,7 +18,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr
     openai_chat_model: str = "gpt-4.1-mini"
     openai_embedding_model: str = "text-embedding-3-small"
-    openai_embedding_dimensions: int = 1536
+    openai_embedding_dimensions: Literal[1536] = 1536
     database_url: str = "postgresql+psycopg://rag:rag@localhost:5432/rag"
     redis_url: str = "redis://localhost:6379/0"
     upload_dir: Path = Path("uploads")

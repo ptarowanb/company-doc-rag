@@ -11,6 +11,7 @@ class DocumentStatus(StrEnum):
     PROCESSING = "PROCESSING"
     READY = "READY"
     FAILED = "FAILED"
+    DELETING = "DELETING"
 
 
 @dataclass(frozen=True, slots=True)

@@ -87,9 +87,14 @@ class DocumentRepository:
         error_message: str | None = None,
     ) -> None:
         async with self._sessions() as session:
-            model = await session.get(DocumentModel, document_id)
+            model = await session.get(DocumentModel, document_id, with_for_update=True)
             if model is None:
                 raise DocumentNotFoundError("문서를 찾지 못했습니다.")
+            if (
+                model.status is DocumentStatus.DELETING
+                and status is not DocumentStatus.DELETING
+            ):
+                return
             model.status = status
             model.error_code = error_code
             model.error_message = error_message
@@ -119,6 +124,13 @@ class ChunkRepository:
         if len(drafts) != len(embeddings):
             raise ValueError("청크 수와 임베딩 수가 일치해야 합니다.")
         async with self._sessions() as session, session.begin():
+            locked_document_id = await session.scalar(
+                select(DocumentModel.id)
+                .where(DocumentModel.id == document_id)
+                .with_for_update()
+            )
+            if locked_document_id is None:
+                raise DocumentNotFoundError("문서를 찾지 못했습니다.")
             await session.execute(delete(ChunkModel).where(ChunkModel.document_id == document_id))
             session.add_all(
                 [

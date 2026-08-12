@@ -7,12 +7,6 @@ from company_doc_rag.domain.errors import TransientEmbeddingError
 from company_doc_rag.workers.celery_app import celery_app
 
 
-def is_retryable_ingestion_error(error: Exception) -> bool:
-    """Celery에서 재시도할 수집 오류인지 판별한다."""
-
-    return isinstance(error, TransientEmbeddingError)
-
-
 @celery_app.task(  # type: ignore[untyped-decorator]
     name="documents.ingest",
     autoretry_for=(TransientEmbeddingError,),

@@ -36,6 +36,23 @@ async def test_문서_상태를_변경하고_조회한다(engine: AsyncEngine) -
 
 
 @pytest.mark.asyncio
+async def test_삭제_중인_문서의_상태를_다른_작업이_덮어쓰지_않는다(engine: AsyncEngine) -> None:
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    repository = DocumentRepository(sessions)
+    document = await repository.create(
+        filename="guide.pdf",
+        sha256="d" * 64,
+        storage_key="deleting.pdf",
+    )
+    await repository.update_status(document.id, DocumentStatus.DELETING)
+
+    await repository.update_status(document.id, DocumentStatus.READY)
+
+    saved = await repository.get(document.id)
+    assert saved.status is DocumentStatus.DELETING
+
+
+@pytest.mark.asyncio
 async def test_동일한_해시의_문서를_거부한다(engine: AsyncEngine) -> None:
     sessions = async_sessionmaker(engine, expire_on_commit=False)
     repository = DocumentRepository(sessions)

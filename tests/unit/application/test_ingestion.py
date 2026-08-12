@@ -99,6 +99,17 @@ async def test_준비된_문서는_다시_수집하지_않는다() -> None:
 
 
 @pytest.mark.asyncio
+async def test_삭제_중인_문서는_수집하지_않는다() -> None:
+    ingest, documents, chunks, _ = 수집기를_만든다()
+    await documents.update_status(documents.document.id, DocumentStatus.DELETING)
+
+    await ingest.execute(documents.document.id)
+
+    assert chunks.replace_count == 0
+    assert documents.document.status is DocumentStatus.DELETING
+
+
+@pytest.mark.asyncio
 async def test_도메인_오류가_발생하면_실패_상태와_코드를_저장한다() -> None:
     ingest, documents, _, loader = 수집기를_만든다()
     loader.error = EmptyDocumentError("본문이 없습니다.")

@@ -72,7 +72,7 @@ class IngestDocument:
 
     async def _execute(self, document_id: UUID) -> None:
         document = await self._documents.get(document_id)
-        if document.status is DocumentStatus.READY:
+        if document.status in {DocumentStatus.READY, DocumentStatus.DELETING}:
             return
 
         await self._documents.update_status(document_id, DocumentStatus.PROCESSING)

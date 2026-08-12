@@ -43,6 +43,8 @@ class TokenChunker:
             normalized = re.sub(r"\s+", " ", page.text).strip()
             if not normalized:
                 continue
+            if token_pages:
+                normalized = f" {normalized}"
             token_pages.extend(
                 (token, page.page_number) for token in self._tokenizer.encode(normalized)
             )

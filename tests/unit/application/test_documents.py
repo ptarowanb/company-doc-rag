@@ -4,7 +4,7 @@ from uuid import UUID
 import pytest
 
 from company_doc_rag.application.documents import DocumentService
-from company_doc_rag.domain.documents import Document
+from company_doc_rag.domain.documents import Document, DocumentStatus
 from company_doc_rag.domain.errors import FileTooLargeError, UnsupportedFileTypeError
 
 
@@ -23,6 +23,26 @@ class 가짜_저장소:
     async def list(self) -> list[Document]:
         return [self.document] if self.document else []
 
+    async def update_status(
+        self,
+        document_id: UUID,
+        status: DocumentStatus,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        assert self.document is not None
+        self.document = Document(
+            id=document_id,
+            filename=self.document.filename,
+            sha256=self.document.sha256,
+            storage_key=self.document.storage_key,
+            status=status,
+            error_code=error_code,
+            error_message=error_message,
+            created_at=self.document.created_at,
+            updated_at=self.document.updated_at,
+        )
+
     async def delete(self, document_id: UUID) -> None:
         self.document = None
 
@@ -31,12 +51,15 @@ class 가짜_파일_저장소:
     def __init__(self) -> None:
         self.content = b""
         self.deleted = False
+        self.delete_error: Exception | None = None
 
     def save(self, content: bytes) -> str:
         self.content = content
         return "id.pdf"
 
     def delete(self, key: str) -> None:
+        if self.delete_error is not None:
+            raise self.delete_error
         self.deleted = True
 
     def path_for(self, key: str) -> Path:
@@ -46,16 +69,22 @@ class 가짜_파일_저장소:
 class 가짜_큐:
     def __init__(self) -> None:
         self.document_id: UUID | None = None
+        self.error: Exception | None = None
 
     def enqueue(self, document_id: UUID) -> None:
+        if self.error is not None:
+            raise self.error
         self.document_id = document_id
 
 
 class 가짜_캐시:
     def __init__(self) -> None:
         self.generation = 0
+        self.error: Exception | None = None
 
     async def bump_generation(self) -> int:
+        if self.error is not None:
+            raise self.error
         self.generation += 1
         return self.generation
 
@@ -104,3 +133,49 @@ async def test_문서_삭제시_원본과_검색_캐시를_무효화한다() -> 
 
     assert storage.deleted is True
     assert cache.generation == 1
+
+
+@pytest.mark.asyncio
+async def test_작업_등록이_실패하면_생성한_문서와_원본을_정리한다() -> None:
+    service, repository, storage, queue, _ = 서비스()
+    queue.error = RuntimeError("broker unavailable")
+
+    with pytest.raises(RuntimeError, match="broker unavailable"):
+        await service.upload("guide.pdf", "application/pdf", b"%PDF-content")
+
+    assert repository.document is None
+    assert storage.deleted is True
+
+
+@pytest.mark.asyncio
+async def test_원본_삭제가_실패하면_문서_행을_보존한다() -> None:
+    service, repository, storage, _, cache = 서비스()
+    document = await service.upload("guide.pdf", "application/pdf", b"%PDF-content")
+    storage.delete_error = OSError("disk unavailable")
+
+    with pytest.raises(OSError, match="disk unavailable"):
+        await service.delete(document.id)
+
+    assert repository.document is not None
+    assert repository.document.status.value == "DELETING"
+    assert cache.generation == 1
+
+
+@pytest.mark.asyncio
+async def test_캐시_무효화가_실패하면_문서_행을_보존한다() -> None:
+    service, repository, storage, _, cache = 서비스()
+    document = await service.upload("guide.pdf", "application/pdf", b"%PDF-content")
+    cache.error = RuntimeError("redis unavailable")
+
+    with pytest.raises(RuntimeError, match="redis unavailable"):
+        await service.delete(document.id)
+
+    assert repository.document is not None
+    assert repository.document.status.value == "DELETING"
+    assert storage.deleted is False
+
+    cache.error = None
+    await service.delete(document.id)
+
+    assert repository.document is None
+    assert storage.deleted is True

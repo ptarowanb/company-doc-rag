@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from company_doc_rag.domain.documents import DocumentStatus
@@ -62,6 +62,7 @@ class ChunkModel(Base):
     document: Mapped[DocumentModel] = relationship(back_populates="chunks")
 
     __table_args__ = (
+        UniqueConstraint("document_id", "index", name="uq_chunks_document_id_index"),
         Index(
             "ix_chunks_embedding_hnsw",
             "embedding",

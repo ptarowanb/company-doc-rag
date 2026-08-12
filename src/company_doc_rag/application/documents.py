@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
-from company_doc_rag.domain.documents import Document
+from company_doc_rag.domain.documents import Document, DocumentStatus
 from company_doc_rag.domain.errors import FileTooLargeError, UnsupportedFileTypeError
 
 
@@ -13,6 +13,14 @@ class _DocumentRepository(Protocol):
     async def get(self, document_id: UUID) -> Document: ...
 
     async def list(self) -> Sequence[Document]: ...
+
+    async def update_status(
+        self,
+        document_id: UUID,
+        status: DocumentStatus,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> None: ...
 
     async def delete(self, document_id: UUID) -> None: ...
 
@@ -59,6 +67,7 @@ class DocumentService:
             raise UnsupportedFileTypeError("PDF 파일만 업로드할 수 있습니다.")
 
         storage_key = self._storage.save(content)
+        document: Document | None = None
         try:
             document = await self._repository.create(
                 filename=filename,
@@ -67,6 +76,8 @@ class DocumentService:
             )
             self._queue.enqueue(document.id)
         except Exception:
+            if document is not None:
+                await self._repository.delete(document.id)
             self._storage.delete(storage_key)
             raise
         return document
@@ -79,6 +90,7 @@ class DocumentService:
 
     async def delete(self, document_id: UUID) -> None:
         document = await self._repository.get(document_id)
-        await self._repository.delete(document_id)
-        self._storage.delete(document.storage_key)
+        await self._repository.update_status(document_id, DocumentStatus.DELETING)
         await self._cache.bump_generation()
+        self._storage.delete(document.storage_key)
+        await self._repository.delete(document_id)

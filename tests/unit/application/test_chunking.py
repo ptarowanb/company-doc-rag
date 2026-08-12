@@ -46,3 +46,16 @@ def test_빈_페이지는_청크에서_제외한다() -> None:
 
     assert len(chunks) == 1
     assert chunks[0].page_start == 2
+
+
+def test_페이지_경계에서_단어가_붙지_않는다() -> None:
+    pages = [
+        PageText(page_number=1, text="alpha"),
+        PageText(page_number=2, text="beta"),
+    ]
+
+    chunks = TokenChunker(max_tokens=100, overlap_tokens=0).split(pages)
+
+    assert len(chunks) == 1
+    assert chunks[0].content == "alpha beta"
+    assert (chunks[0].page_start, chunks[0].page_end) == (1, 2)

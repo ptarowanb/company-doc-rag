@@ -21,3 +21,11 @@ def test_환경변수로_모델을_교체할_수_있다(monkeypatch: pytest.Monk
     assert settings.openai_chat_model == "chat-test"
     assert settings.openai_embedding_model == "embedding-test"
 
+
+def test_스키마와_다른_임베딩_차원을_거부한다(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_EMBEDDING_DIMENSIONS", "3072")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
