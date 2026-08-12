@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -15,6 +15,7 @@ from company_doc_rag.domain.errors import (
     DocumentNotFoundError,
     DuplicateDocumentError,
 )
+from company_doc_rag.domain.search import SearchHit
 from company_doc_rag.infrastructure.models import ChunkModel, DocumentModel
 
 
@@ -143,3 +144,61 @@ class ChunkRepository:
         async with self._sessions() as session:
             models = (await session.scalars(statement)).all()
         return [_to_chunk(model) for model in models]
+
+    async def vector_search(
+        self,
+        query_embedding: Sequence[float],
+        limit: int,
+        document_ids: Sequence[UUID] | None = None,
+    ) -> list[SearchHit]:
+        distance = ChunkModel.embedding.cosine_distance(list(query_embedding)).label("distance")
+        statement = (
+            select(ChunkModel, DocumentModel.filename, distance)
+            .join(DocumentModel, ChunkModel.document_id == DocumentModel.id)
+            .where(DocumentModel.status == DocumentStatus.READY)
+            .order_by(distance)
+            .limit(limit)
+        )
+        if document_ids:
+            statement = statement.where(ChunkModel.document_id.in_(document_ids))
+        async with self._sessions() as session:
+            rows = (await session.execute(statement)).all()
+        return [
+            self._to_search_hit(model, filename, 1.0 - float(score))
+            for model, filename, score in rows
+        ]
+
+    async def keyword_search(
+        self,
+        query: str,
+        limit: int,
+        document_ids: Sequence[UUID] | None = None,
+    ) -> list[SearchHit]:
+        similarity = func.similarity(ChunkModel.content, query).label("similarity")
+        statement = (
+            select(ChunkModel, DocumentModel.filename, similarity)
+            .join(DocumentModel, ChunkModel.document_id == DocumentModel.id)
+            .where(DocumentModel.status == DocumentStatus.READY)
+            .order_by(similarity.desc())
+            .limit(limit)
+        )
+        if document_ids:
+            statement = statement.where(ChunkModel.document_id.in_(document_ids))
+        async with self._sessions() as session:
+            rows = (await session.execute(statement)).all()
+        return [
+            self._to_search_hit(model, filename, float(score))
+            for model, filename, score in rows
+        ]
+
+    @staticmethod
+    def _to_search_hit(model: ChunkModel, filename: str, score: float) -> SearchHit:
+        return SearchHit(
+            chunk_id=model.id,
+            document_id=model.document_id,
+            filename=filename,
+            content=model.content,
+            page_start=model.page_start,
+            page_end=model.page_end,
+            score=score,
+        )
