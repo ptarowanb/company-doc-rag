@@ -1,0 +1,103 @@
+x-app-environment: &app-environment
+  OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY를 .env에 설정하세요}
+  OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4.1-mini}
+  OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+  OPENAI_EMBEDDING_DIMENSIONS: ${OPENAI_EMBEDDING_DIMENSIONS:-1536}
+  DATABASE_URL: postgresql+psycopg://rag:rag@postgres:5432/rag
+  REDIS_URL: redis://redis:6379/0
+  UPLOAD_DIR: /app/uploads
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-20971520}
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+  LANGFUSE_HOST: ${LANGFUSE_HOST:-}
+
+services:
+  api:
+    build:
+      context: .
+    command:
+      - sh
+      - -c
+      - alembic upgrade head && uvicorn company_doc_rag.main:create_runtime_app --factory --host 0.0.0.0 --port 8000
+    environment: *app-environment
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/uploads
+      - model_cache:/home/app/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    init: true
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+    command:
+      - celery
+      - -A
+      - company_doc_rag.workers.celery_app:celery_app
+      - worker
+      - --loglevel=INFO
+      - --concurrency=2
+    environment: *app-environment
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    init: true
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: rag
+      POSTGRES_USER: rag
+      POSTGRES_PASSWORD: rag
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag -d rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  uploads:
+  model_cache:
+  postgres_data:
+  redis_data:
+

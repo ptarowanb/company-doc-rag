@@ -1,3 +1,5 @@
+from collections.abc import Awaitable, Callable
+
 from fastapi import FastAPI
 
 from company_doc_rag.api.documents import router as documents_router
@@ -14,6 +16,7 @@ def create_app(
     settings: Settings | None = None,
     answer_question: AnswerQuestion | None = None,
     document_service: DocumentService | None = None,
+    readiness_check: Callable[[], Awaitable[None]] | None = None,
 ) -> FastAPI:
     """의존성을 조립해 FastAPI 애플리케이션을 생성한다."""
 
@@ -26,6 +29,7 @@ def create_app(
     app.state.settings = resolved_settings
     app.state.answer_question = answer_question
     app.state.document_service = document_service
+    app.state.readiness_check = readiness_check
     app.add_exception_handler(DomainError, domain_error_handler)
     app.include_router(health_router)
     app.include_router(documents_router)
@@ -40,7 +44,7 @@ def create_runtime_app() -> FastAPI:
 
     settings = get_settings()
     runtime = build_application_runtime(settings)
-    app = create_app(settings, runtime.answer_question, runtime.documents)
+    app = create_app(settings, runtime.answer_question, runtime.documents, runtime.ready)
     app.state.runtime = runtime
     app.router.add_event_handler("shutdown", runtime.close)
     return app

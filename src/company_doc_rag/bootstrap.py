@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from redis.asyncio import Redis
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from company_doc_rag.application.answering import AnswerQuestion
@@ -47,6 +48,11 @@ class ApplicationRuntime:
     redis: Redis
     documents: DocumentService
     answer_question: AnswerQuestion
+
+    async def ready(self) -> None:
+        async with self.engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+        await self.redis.ping()
 
     async def close(self) -> None:
         await self.redis.aclose()
